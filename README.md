@@ -1,2 +1,1 @@
 # bot1
-test
