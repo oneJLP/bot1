@@ -37,7 +37,8 @@ songsAndDifficulty = setting(0)
 
 def testify(test):
     if test <= 14.2:
-        package = '本次考试曲目为' + random.choice(['Class memory', 'Chronologika', 'GOODTEK', '风屿 IN']) + '全连\n加油，相信你一定可以的喵~'
+        songs = random.choice(['Class memory', 'Chronologika', 'GOODTEK'])
+        package = '本次考试曲目为' + songs + '全连\n加油，相信你一定可以的喵~'
     else:
         package = '以下三首曲目中，需要任意一首曲目rks大于等于13.9\n'
         useable = []
@@ -45,20 +46,23 @@ def testify(test):
             if test <= v <= test + 0.3:
                 useable.append(k)
         random.shuffle(useable)
+        songs = ''
         for song in useable[:3]:
-            package += '<' + song + '>定数为' + str(songsAndDifficulty[song]) + '，acc达到' + str(
+            song1 = '<' + song + '>定数为' + str(songsAndDifficulty[song]) + '，acc达到' + str(
                 round((13.9 / songsAndDifficulty[song]) ** 0.5 * 45 + 55, 2)) + '%即可过关' + '\n'
+            package += song1
+            songs += song1
         package += '加油，相信你一定可以的喵~'
-    return package
+    return package,songs
 
 
-def get_testified_list(mode: int, uid: str = '', buid='', msg=None):
+def get_testified_list(mode: int, uid: str = '', buid='', msg=None,data=None):
     with open('testified_list.json', 'r', encoding='utf8') as f:
         testified_list1 = json.loads(f.read())
     if mode == 0:
         return testified_list1
     elif mode == 1:
-        testified_list1[uid] = [buid, '']
+        testified_list1[uid] = [buid, '',data]
         with open('testified_list.json', 'w', encoding='utf8') as f:
             f.write(json.dumps(testified_list1))
             f.close()
@@ -68,7 +72,7 @@ def get_testified_list(mode: int, uid: str = '', buid='', msg=None):
             f.write(json.dumps(testified_list1))
             f.close()
     elif mode == 3:
-        testified_list1[uid] = [testified_list1[uid][0], msg]
+        testified_list1[uid] = [testified_list1[uid][0], msg,testified_list1[uid][2]]
         with open('testified_list.json', 'w', encoding='utf8') as f:
             f.write(json.dumps(testified_list1))
             f.close()
@@ -90,6 +94,28 @@ def get_allowed_list(mode: int, buid: str = ''):
         with open('allowed_list.json', 'w', encoding='utf8') as f:
             f.write(json.dumps(allowed_list1))
             f.close()
+
+def achievement_setting(mode,uid):
+    with open('achievements.json', 'r', encoding='utf8') as f:
+        achievement_dict = json.loads(f.read())
+    if mode == 0:
+        try:
+            return achievement_dict[uid]
+        except KeyError:
+            return 0
+    elif mode == 1:
+        try:
+            achievement_dict[uid] += 1
+            with open('achievements.json', 'w', encoding='utf8') as f:
+                f.write(json.dumps(achievement_dict))
+                f.close()
+        except KeyError:
+            achievement_dict[uid] = 1
+            with open('achievements.json', 'w', encoding='utf8') as f:
+                f.write(json.dumps(achievement_dict))
+                f.close()
+
+
 
 
 def f(x):
@@ -114,14 +140,15 @@ async def on_message(message: qq.Message):
         pass
     attachment_urls = [x.url for x in (message.attachments if message.attachments else [])]
 
-    isadmin = '频道主' in roles or '超级管理员' in roles
+    isadmin = '审核员' in roles
+    isadmin2 = '频道主' in roles or '超级管理员' in roles
     mention = list(filter(f, [x if not x.bot else '' for x in message.mentions]))
     if mention == []:
         mention = None
     else:
         mention = await message.guild.fetch_member(mention[0].id)
     # print(message.channel.get_partial_message(message.id))
-    if not uname == 'Satellite-测试中':
+    if not uname == 'Satellite':
         if msg == '/ping':
             await message.channel.send('当前频道服务在线', mention_author=member)
         elif msg == '/help':
@@ -133,25 +160,30 @@ async def on_message(message: qq.Message):
                     txt += ('\n' + k + '定数为: ' + str(v))
             await message.channel.send(txt)
         elif msg[:6] == '/test ':
-            if uid in get_testified_list(0).keys():
-                await message.channel.send('你已经获取过一次审核题目了，请勿重复获取！特殊情况请向管理员申请清除记录', mention_author=member)
+            if not isadmin or isadmin2:
+
+                if uid in get_testified_list(0).keys():
+                    await message.channel.send('你已经获取过一次审核题目了，请勿重复获取！特殊情况请向管理员申请清除记录', mention_author=member)
+                else:
+                    try:
+
+                        rks = float(msg.split()[1])
+                        if rks < 13.5:
+                            await message.channel.send('rks太低啦，练练再来审核哦！（至低需要13.5）', mention_author=member)
+                        else:
+                            t = testify(rks)
+                            get_testified_list(1, uid, msg.split()[2].replace('UID:', ''),data=t[1])
+                            await message.channel.send('欢迎>' + uname + '<前来审核！\n' + t[0] + (
+                                '\n你的一次获取考题机会已耗尽，无法再次获取\n\n打完歌之后请使用/upload命令上传你的消息记录截图和结算截图！' if not isadmin else ''),
+                                                       mention_author=member)
+
+                            await member.add_roles(message.guild.get_role(15454880))
+
+                    except Exception as e:
+                        print(e)
+                        await message.channel.send('输入格式出现错误！应当为：/test 你的rks 你的b站UID', mention_author=member)
             else:
-                try:
-
-                    rks = float(msg.split()[1])
-                    if rks < 13.5:
-                        await message.channel.send('rks太低啦，练练再来审核哦！（至低需要13.5）', mention_author=member)
-                    else:
-                        get_testified_list(1, uid, msg.split()[2].replace('UID:', ''))
-                        await message.channel.send('欢迎>' + uname + '<前来审核！\n' + testify(rks) + (
-                            '\n你的一次获取考题机会已耗尽，无法再次获取\n\n打完歌之后请使用/upload命令上传你的消息记录截图和结算截图！' if not isadmin else ''),
-                                                   mention_author=member)
-
-                        await member.add_roles(message.guild.get_role(15454880))
-
-                except Exception as e:
-                    print(e)
-                    await message.channel.send('输入格式出现错误！应当为：/test 你的rks 你的b站UID', mention_author=member)
+                await message.channel.send('审核员不需要取题，禁止刷业绩！', mention_author=member)
         elif msg == '/待审队列':
             if isadmin:
                 待审list = {}
@@ -168,6 +200,16 @@ async def on_message(message: qq.Message):
 
             else:
                 await message.channel.send('你的权限不足！', mention_author=member)
+        elif msg == '/取题记录':
+            try:
+                await message.channel.send('你的取题记录为：\n'+get_testified_list(0)[uid][2]+'请尽快完成审核！',mention_author=member)
+            except KeyError:
+                await message.channel.send('你还没有使用/test命令取题，或已经通过审核!',mention_author=member)
+        elif msg == '/查询业绩':
+            if isadmin:
+                await message.channel.send('你的业绩为：'+str(achievement_setting(0,uid)),mention_author=member)
+            else:
+                await message.channel.send('请先入职！',mention_author=member)
         elif msg == '/已取题':
             if isadmin:
                 await message.channel.send('已取题群员如下：\n' + '\n'.join(
@@ -200,21 +242,28 @@ async def on_message(message: qq.Message):
         elif msg[:7] == '/allow ':
             if isadmin:
                 try:
-                    await mention.send(base64.b64encode(msg.split(' ')[-1].encode('utf-8')).decode('ascii') + '''\n这是你的入群密码(如果有等号，等号也是密码的一部分)
+                    if member.id == mention.id:
+                        await message.channel.send('禁止刷业绩！', mention_author=member)
+                    else:
+                        await mention.send(base64.b64encode(msg.split(' ')[-1].encode('utf-8')).decode('ascii') + '''\n这是你的入群密码(如果有等号，等号也是密码的一部分)
 请根据此密码及时进群！密码过期概不负责
 进群请修改昵称为昵称+B站uid
 不改还是会被踢
 大群群号730173176''')
-                    await message.channel.send('密码已发送，若未收到请请求审核员再次通过', mention_author=mention)
+                        await message.channel.send('密码已发送，若未收到请请求审核员再次通过', mention_author=mention)
 
-                    if uid in list(get_testified_list(0).keys()):
-                        get_testified_list(2, str(mention.id))
-                    get_allowed_list(1, msg.split(' ')[-1])
-                    await mention.add_roles(message.guild.get_role(15454914))
-                    await mention.remove_roles(message.guild.get_role(15454891))
+                        if uid in list(get_testified_list(0).keys()):
+                            get_testified_list(2, str(mention.id))
+                        get_allowed_list(1, msg.split(' ')[-1])
+                        await mention.add_roles(message.guild.get_role(15454914))
+                        await mention.remove_roles(message.guild.get_role(15454891))
+
+
+                        achievement_setting(1,uid)
+                        await message.channel.send('业绩+1，当前业绩：'+str(achievement_setting(0,uid)))
                 except Exception as e:
                     print(e)
-                    await message.channel.send('输入格式出现错误或该群员不存在！\n'+str(repr(e)), mention_author=member)
+                    await message.channel.send('输入格式出现错误或该成员不存在！\n'+str(repr(e)), mention_author=member)
             else:
                 await message.channel.send('你的权限不足！', mention_author=member)
         elif msg[:8] == '/allow1 ':
@@ -228,6 +277,8 @@ async def on_message(message: qq.Message):
                     else:
                         sd1 = [待审list1[int(msg[8:]) - 1]]
                     for sd in sd1:
+                        achievement_setting(1, uid)
+                        await message.channel.send('业绩+1，当前业绩：' + str(achievement_setting(0, uid)))
                         print(sd)
                         m = await message.guild.fetch_member(sd[0])
                         await m.send(base64.b64encode(sd[1].encode('utf-8')).decode('ascii') + '''\n这是你的入群密码(如果有等号，等号也是密码的一部分)
@@ -240,31 +291,36 @@ async def on_message(message: qq.Message):
                         get_allowed_list(1, sd[1])
                         await m.add_roles(message.guild.get_role(15454914))
                         await m.remove_roles(message.guild.get_role(15454891))
+
                 except Exception as e:
                     print(e)
                     await message.channel.send('输入格式出现错误或该序号不存在！\n'+str(repr(e)), mention_author=member)
             else:
                 await message.channel.send('你的权限不足！', mention_author=member)
-        elif msg[:11] == '/disallow1 ':
+        elif msg[:11] == '/refuse ':
             if isadmin:
                 待审list1 = [(k, v[0]) if v[1] != '' else '' for k, v in get_testified_list(0).items()]
                 待审list1 = list(filter(f, 待审list1))
                 try:
+                    achievement_setting(1, uid)
+                    await message.channel.send('业绩+1，当前业绩：' + str(achievement_setting(0, uid)))
                     disallow1_uid = 待审list1[int(msg[11:]) - 1][0]
                     m = await message.guild.fetch_member(disallow1_uid)
                     get_testified_list(3, disallow1_uid, msg='')
                     await message.channel.send('你的审核内容不合格，没有通过审核', mention_author=m)
                     await m.add_roles(message.guild.get_role(15454880))
                     await m.remove_roles(message.guild.get_role(15454891))
+
                 except Exception as e:
                     print(e)
                     await message.channel.send('输入格式出现错误或该序号不存在！\n'+str(repr(e)), mention_author=member)
             else:
                 await message.channel.send('你的权限不足！', mention_author=member)
-        elif msg == '/withdraw':
+        elif msg == '/撤销':
             try:
-                await message.channel.send('你的审核内容已撤销！', mention_author=member)
                 get_testified_list(3, uid, msg='')
+                await message.channel.send('你的审核内容已撤销！', mention_author=member)
+
             except:
                 await message.channel.send('你还没有使用/test命令获取审核题目或还没有上传审核内容！', mention_author=member)
         elif msg[:5] == '/cal ':
